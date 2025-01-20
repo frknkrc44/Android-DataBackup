@@ -62,6 +62,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import java.io.File
 import javax.inject.Inject
 
 class AppsRepo @Inject constructor(
@@ -472,8 +473,77 @@ class AppsRepo @Inject constructor(
         val path = pathUtil.getLocalBackupAppsDir()
         val paths = rootService.walkFileTree(path)
         paths.forEachIndexed { index, pathParcelable ->
+            val parentPath = PathUtil.getParentPath(pathParcelable.pathString)
+
+            if (!rootService.exists("$parentPath/$ConfigsPackageRestoreName")) {
+                val userStr = pathParcelable.pathList[pathParcelable.pathList.size - 1]
+                val pkgName = pathParcelable.pathList[pathParcelable.pathList.size - 2]
+                val uid = userStr.substring(userStr.indexOf('_') + 1).toInt()
+                val parentFile = File(parentPath)
+
+                val apkSelected = if (rootService.exists("$parentPath/apk.tar.zst")) { DataState.Selected } else { DataState.NotSelected }
+                val userSelected = if (rootService.exists("$parentPath/user.tar.zst")) { DataState.Selected } else { DataState.NotSelected }
+                val userDeSelected = if (rootService.exists("$parentPath/user_de.tar.zst")) { DataState.Selected } else { DataState.NotSelected }
+                val dataSelected = if (rootService.exists("$parentPath/data.tar.zst")) { DataState.Selected } else { DataState.NotSelected }
+                val mediaSelected = if (rootService.exists("$parentPath/media.tar.zst")) { DataState.Selected } else { DataState.NotSelected }
+                val obbSelected = if (rootService.exists("$parentPath/obb.tar.zst")) { DataState.Selected } else { DataState.NotSelected }
+
+                PackageEntity(
+                    id = 0L,
+                    indexInfo = PackageIndexInfo(
+                        opType = OpType.RESTORE,
+                        packageName = pkgName,
+                        userId = uid,
+                        // TODO: Detect compression type from files
+                        compressionType = CompressionType.ZSTD,
+                        preserveId = 0L,
+                        cloud = "",
+                        backupDir = context.localBackupSaveDir()
+                    ),
+                    packageInfo = PackageInfo(
+                        label = pkgName,
+                        lastUpdateTime = parentFile.lastModified(),
+                        versionName = "1.0",
+                        versionCode = 1L,
+                        flags = 0,
+                        firstInstallTime = parentFile.lastModified(),
+                    ),
+                    extraInfo = PackageExtraInfo(
+                        uid = uid,
+                        hasKeystore = false,
+                        permissions = listOf(),
+                        ssaid = "",
+                        blocked = false,
+                        activated = false,
+                        enabled = true,
+                        lastBackupTime = parentFile.lastModified(),
+                        firstUpdated = true,
+                    ),
+                    dataStates = PackageDataStates(
+                        apkState = apkSelected,
+                        userState = userSelected,
+                        userDeState = userDeSelected,
+                        dataState = dataSelected,
+                        mediaState = mediaSelected,
+                        obbState = obbSelected,
+                        permissionState = DataState.NotSelected,
+                        ssaidState = DataState.NotSelected,
+                    ),
+                    dataStats = PackageDataStats(),
+                    storageStats = PackageStorageStats(),
+                    displayStats = PackageDataStats(),
+                ).apply {
+                    if (appsDao.query(packageName, indexInfo.opType, userId, preserveId, indexInfo.compressionType, indexInfo.cloud, indexInfo.backupDir) == null) {
+                        appsDao.upsert(this)
+                    }
+                }
+
+                return
+            }
+
             val fileName = PathUtil.getFileName(pathParcelable.pathString)
             onLoad(index, paths.size, fileName)
+
             if (fileName == ConfigsPackageRestoreName) {
                 runCatching {
                     rootService.readJson<PackageEntity>(pathParcelable.pathString).also { p ->
