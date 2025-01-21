@@ -5,6 +5,7 @@ import android.content.Context
 const val TAR_SUFFIX = "tar"
 const val ZSTD_SUFFIX = "tar.zst"
 const val LZ4_SUFFIX = "tar.lz4"
+val COMPRESSION_SUFFIXES = arrayOf(TAR_SUFFIX, ZSTD_SUFFIX, LZ4_SUFFIX)
 
 enum class CompressionType(val type: String, val suffix: String, val compressPara: String, val decompressPara: String) {
     TAR("tar", TAR_SUFFIX, "", ""),
